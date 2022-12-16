@@ -10,7 +10,7 @@
 
 This repository contains the official pytorch implementation of *Convergent Data-driven Regularizations for CT Reconstruction*.
 
-<!--[![arXiv](http://img.shields.io/badge/arXiv-0000.00000-b31b1b.svg)](https://arxiv.org/abs/0000.00000)-->
+[![arXiv](http://img.shields.io/badge/arXiv-2212.07786-b31b1b.svg)](https://arxiv.org/abs/2212.07786)
 ![Python](http://img.shields.io/badge/python-%3E%3D3.8-blue)
 ![PyTorch](http://img.shields.io/badge/PyTorch-%3E%3D1.12-blue)
 
