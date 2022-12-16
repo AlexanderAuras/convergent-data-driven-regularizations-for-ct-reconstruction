@@ -42,7 +42,8 @@ Dependencies to view tensorboard results:
 ## Installation
 - Install conda and create environment (optional)
 - Install dependencies
-- Clone repository: `git clone https://github.com/AlexanderAuras/LearnedRadonFilters`
+- Clone repository: <br/> 
+  `git clone https://github.com/AlexanderAuras/convergent-data-driven-regularizations-for-ct-reconstruction`
 - Adjust the output directory in *configs/default.yaml* and the paths in *mnist_datamodule.py*
 
 ## Usage
@@ -50,8 +51,10 @@ Dependencies to view tensorboard results:
     - Adjust configurations for datasets in *configs/dataset/\<dataset\>.yaml*
     - Adjust configurations for the models in *configs/model/\<model\>.yaml*
     - Adjust general configurations in *configs/default.yaml*
-- Execute the training/calculations with `python main.py hydra.job.name=<name>`
-- View tensorboard results via `tensorboard --logdir=<output_directory>`
+- Execute the training/calculations with <br/>
+  `python main.py hydra.job.name=<name>`
+- View tensorboard results via <br/>
+  `tensorboard --logdir=<output_directory>`
 - View saved *.pt* files in the jupyter notebooks *plots.ipynb*, *test.ipynb* or *visualization.ipynb*
     - For every run $\Pi$, $\Delta$ and $\Gamma$ are saved in *pi.pt*, *delta.pt* and *gamma.pt* 
     - For FFT-runs, *coefficients.pt* contains $\rho$ or $\overline{\rho}$
