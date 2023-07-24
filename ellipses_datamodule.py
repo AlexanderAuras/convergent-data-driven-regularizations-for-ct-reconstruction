@@ -15,10 +15,14 @@ import matplotlib.patches
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ct_reconstruction_dataset import CTReconstructionDataset
+from fixed_noise_dataset import Noise, FixedNoiseDataset
 
 
-class _EllipsesDataset(torch.utils.data.Dataset):
+
+class _EllipsesDataset(torch.utils.data.Dataset[typing.Tuple[torch.Tensor, None]]):
     def __init__(self, img_count: int, img_size: int, ellipses_count: int, ellipses_size: float, ellipses_size_min: float=1, transform: typing.Union[typing.Callable[[torch.Tensor],torch.Tensor],None]=None, generator: typing.Union[torch.Generator,None]=None):
+        super().__init__()
         self.img_count = img_count
         self.img_size = img_size
         self.ellipses_count = torch.poisson(torch.full((img_count,), ellipses_count).to(torch.float32), generator=generator).to(torch.int32)
@@ -54,7 +58,7 @@ class _EllipsesDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return self.img_count
 
-    def __getitem__(self, idx: int) -> typing.Tuple[torch.Tensor, int]:
+    def __getitem__(self, idx: int) -> typing.Tuple[torch.Tensor, None]:
         fig = plt.figure(figsize=(self.img_size,self.img_size), dpi=1)
         ax = fig.add_axes([0.0,0.0,1.0,1.0])
         ellipse_func = lambda w, h, a, t: (w/2.0*cos(t)*cos(a)-h/2.0*sin(t)*sin(a), w/2.0*cos(t)*sin(a)+h/2.0*sin(t)*cos(a))
@@ -94,41 +98,89 @@ class _EllipsesDataset(torch.utils.data.Dataset):
         plt.close()
         if self.transform != None:
             img = self.transform(img)
-        return img, 0
+        return img, None
 
 
 
 class EllipsesDataModule(pl.LightningDataModule):
-    def __init__(self, config: omegaconf.DictConfig) -> None:
+    def __init__(self, config: omegaconf.DictConfig, noise: Noise) -> None:
         super().__init__()
         self.config = config
         self.training_seed = torch.randint(0, 999_999_999_999_999, (1,)).item()
         self.validation_seed = torch.randint(0, 999_999_999_999_999, (1,)).item()
         self.test_seed = torch.randint(0, 999_999_999_999_999, (1,)).item()
+        self.__noise = noise
 
-    def train_dataloader(self) -> torch.utils.data.DataLoader:
+    def train_dataloader(self) -> torch.utils.data.DataLoader[typing.Tuple[torch.Tensor,torch.Tensor,torch.Tensor,torch.Tensor]]:
         training_transform = torchvision.transforms.Compose([
             torchvision.transforms.Lambda(lambda x: torchvision.transforms.functional.gaussian_blur(x, 5, 2.5))
         ])
         generator = torch.Generator()
         generator.manual_seed(self.training_seed)
-        training_dataset = _EllipsesDataset((640 if self.config.training_batch_count == -1 else self.config.training_batch_count)*self.config.training_batch_size, self.config.dataset.img_size, self.config.dataset.ellipse_count, self.config.dataset.ellipse_size, self.config.dataset.ellipse_size_min, training_transform if self.config.dataset.blurred else None, generator)
-        return torch.utils.data.DataLoader(training_dataset, drop_last=self.config.drop_last_training_batch, batch_size=self.config.training_batch_size, shuffle=self.config.shuffle_training_data, num_workers=self.config.num_workers)
+        training_dataset = _EllipsesDataset(
+            (640 if self.config.training_batch_count == -1 else self.config.training_batch_count)*self.config.training_batch_size, 
+            self.config.img_size, 
+            self.config.trainval_dataset.ellipse_count, 
+            self.config.trainval_dataset.ellipse_size, 
+            self.config.trainval_dataset.ellipse_size_min, 
+            training_transform if self.config.trainval_dataset.blurred else None, 
+            generator)
+        training_dataset = CTReconstructionDataset(training_dataset)
+        training_dataset = FixedNoiseDataset(training_dataset, noise=self.__noise, append_clean=True, append_noise=True)
+        return torch.utils.data.DataLoader(
+            training_dataset, 
+            drop_last=self.config.drop_last_training_batch, 
+            batch_size=self.config.training_batch_size, 
+            shuffle=self.config.shuffle_training_data, 
+            num_workers=self.config.num_workers
+        )
     
-    def val_dataloader(self) -> torch.utils.data.DataLoader:
+    def val_dataloader(self) -> torch.utils.data.DataLoader[typing.Tuple[torch.Tensor,torch.Tensor,torch.Tensor,torch.Tensor]]:
         validation_transform = torchvision.transforms.Compose([
             torchvision.transforms.Lambda(lambda x: torchvision.transforms.functional.gaussian_blur(x, 5, 2.5))
         ])
         generator = torch.Generator()
         generator.manual_seed(self.validation_seed)
-        validation_dataset = _EllipsesDataset((160 if self.config.validation_batch_count == -1 else self.config.validation_batch_count)*self.config.validation_batch_size, self.config.dataset.img_size, self.config.dataset.ellipse_count, self.config.dataset.ellipse_size, self.config.dataset.ellipse_size_min, validation_transform if self.config.dataset.blurred else None, generator)
-        return torch.utils.data.DataLoader(validation_dataset, drop_last=self.config.drop_last_validation_batch, batch_size=self.config.validation_batch_size, shuffle=self.config.shuffle_validation_data, num_workers=self.config.num_workers)
+        validation_dataset = _EllipsesDataset(
+            (160 if self.config.validation_batch_count == -1 else self.config.validation_batch_count)*self.config.validation_batch_size, 
+            self.config.img_size, 
+            self.config.trainval_dataset.ellipse_count, 
+            self.config.trainval_dataset.ellipse_size, 
+            self.config.trainval_dataset.ellipse_size_min, 
+            validation_transform if self.config.trainval_dataset.blurred else None, 
+            generator
+        )
+        validation_dataset = CTReconstructionDataset(validation_dataset)
+        validation_dataset = FixedNoiseDataset(validation_dataset, noise=self.__noise, append_clean=True, append_noise=True)
+        return torch.utils.data.DataLoader(
+            validation_dataset, 
+            drop_last=self.config.drop_last_validation_batch, 
+            batch_size=self.config.validation_batch_size, 
+            shuffle=self.config.shuffle_validation_data, 
+            num_workers=self.config.num_workers
+        )
 
-    def test_dataloader(self) -> torch.utils.data.DataLoader:
+    def test_dataloader(self) -> torch.utils.data.DataLoader[typing.Tuple[torch.Tensor,torch.Tensor,torch.Tensor,torch.Tensor]]:
         test_transform = torchvision.transforms.Compose([
             torchvision.transforms.Lambda(lambda x: torchvision.transforms.functional.gaussian_blur(x, 5, 2.5))
         ])
         generator = torch.Generator()
         generator.manual_seed(self.test_seed)
-        test_dataset = _EllipsesDataset((200 if self.config.test_batch_count == -1 else self.config.test_batch_count)*self.config.test_batch_size, self.config.dataset.img_size, self.config.dataset.ellipse_count, self.config.dataset.ellipse_size, self.config.dataset.ellipse_size_min, test_transform if self.config.dataset.blurred else None, generator)
-        return torch.utils.data.DataLoader(test_dataset, drop_last=self.config.drop_last_test_batch, batch_size=self.config.test_batch_size, shuffle=self.config.shuffle_test_data, num_workers=self.config.num_workers)
+        test_dataset = _EllipsesDataset(
+            (200 if self.config.test_batch_count == -1 else self.config.test_batch_count)*self.config.test_batch_size, 
+            self.config.img_size, 
+            self.config.test_dataset.ellipse_count, 
+            self.config.test_dataset.ellipse_size, 
+            self.config.test_dataset.ellipse_size_min, 
+            test_transform if self.config.test_dataset.blurred else None, 
+            generator
+        )
+        test_dataset = CTReconstructionDataset(test_dataset)
+        test_dataset = FixedNoiseDataset(test_dataset, noise=self.__noise, append_clean=True, append_noise=True)
+        return torch.utils.data.DataLoader(
+            test_dataset, 
+            drop_last=self.config.drop_last_test_batch, 
+            batch_size=self.config.test_batch_size, 
+            shuffle=self.config.shuffle_test_data, 
+            num_workers=self.config.num_workers
+        )
