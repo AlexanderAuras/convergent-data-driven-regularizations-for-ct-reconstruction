@@ -112,10 +112,9 @@ def main(config: omegaconf.DictConfig) -> None:
             raise RuntimeError("Incompatible sino_angles")
         if config.sino_positions != None:
             raise RuntimeError("Incompatible sino_positions")
-        #config.sino_angles = torch.linspace(0.0, torch.pi, 1001)[:-1].tolist()
-        config.sino_angles = torch.linspace(0.0, torch.pi, 501)[:-1].tolist()
-        #config.sino_positions = torch.arange(-256,257).tolist()
-        config.sino_positions = torch.arange(-128,129).tolist()
+        config.img_size = 362
+        config.sino_angles = torch.linspace(torch.pi*0.5, torch.pi*1.5, 501)[:-1].flip(-1).tolist()
+        config.sino_positions = (-torch.linspace(-362.0/sqrt(2.0), 362.0/sqrt(2.0), 257, dtype=torch.float)).tolist()
     elif config.trainval_dataset.name == "Apple-CT":
         trainval_datamodule = AppleCTDataModule(config)
         if config.sino_angles != None:
@@ -147,14 +146,15 @@ def main(config: omegaconf.DictConfig) -> None:
         test_datamodule = EllipsesDataModule(config, test_noise)
     elif config.test_dataset.name == "LoDoPaB":
         test_datamodule = LoDoPaBDataModule(config)
+        if config.img_size != None and config.trainval_dataset.name != "LoDoPaB":
+            raise RuntimeError("Incompatible img_size")
         if config.sino_angles != None and config.trainval_dataset.name != "LoDoPaB":
             raise RuntimeError("Incompatible sino_angles")
         if config.sino_positions != None and config.trainval_dataset.name != "LoDoPaB":
             raise RuntimeError("Incompatible sino_positions")
-        #config.sino_angles = torch.linspace(0.0, torch.pi, 1001)[:-1].tolist()
-        config.sino_angles = torch.linspace(0.0, torch.pi, 501)[:-1].tolist()
-        #config.sino_positions = torch.arange(-256,257).tolist()
-        config.sino_positions = torch.arange(-128,129).tolist()
+        config.img_size = 362
+        config.sino_angles = torch.linspace(torch.pi*0.5, torch.pi*1.5, 501)[:-1].flip(-1).tolist()
+        config.sino_positions = (-torch.linspace(-362.0/sqrt(2.0), 362.0/sqrt(2.0), 257, dtype=torch.float)).tolist()
     elif config.test_dataset.name == "Apple-CT":
         test_datamodule = AppleCTDataModule(config)
         if config.sino_angles != None and config.trainval_dataset.name != "Apple-CT":

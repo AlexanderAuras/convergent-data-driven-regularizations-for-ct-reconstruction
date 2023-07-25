@@ -220,7 +220,7 @@ class FilterModel(pl.LightningModule):
             self.training_analytic_loss_metric.update(analytic_loss.item())
             self.training_analytic_psnr_metric.update(torchmetrics.functional.peak_signal_noise_ratio(analytic_reconstruction, ground_truth))
             self.training_analytic_ssim_metric.update(typing.cast(torch.Tensor, torchmetrics.functional.structural_similarity_index_measure(analytic_reconstruction, ground_truth)))
-        
+
         #Log training metrics after each batch
         if self.logger:
             logger = typing.cast(pytorch_lightning.loggers.TensorBoardLogger, self.logger).experiment
