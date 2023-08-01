@@ -51,7 +51,7 @@ noise_type: "gaussian" #"uniform" "poisson" "multivariate_gaussian"
 noise_level: 5e-2
 
 #####Run settings#####
-optimizer_lr: 1e-2
+optimizer_lr: 0.1
 epochs: 10
 training_batch_count: -1
 validation_batch_count: -1

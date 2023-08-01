@@ -220,7 +220,7 @@ def main(config: omegaconf.DictConfig) -> None:
                 0.005: "l",
                 0.015: "m",
                 0.03: "h",
-                #0.0: "x"
+                0.01: "x"
             }[config.noise_level]+config.trainval_dataset.name[0].lower()+".pt")))
         else:
             model = modelClass(config)
