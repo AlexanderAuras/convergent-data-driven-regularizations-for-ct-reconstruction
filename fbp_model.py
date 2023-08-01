@@ -1,32 +1,27 @@
 import inspect
-from math import ceil
 import typing
 import warnings
+from math import ceil
 
+import matplotlib
 import omegaconf
-
 import pytorch_lightning as pl
 import pytorch_lightning.loggers
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.tensorboard
-
 import torchmetrics
 
-import matplotlib
 matplotlib.use("agg")
-import matplotlib.pyplot as plt
 
 import radon as radon
 
 from utils import log_img
 
 
-
 class FBPModel(pl.LightningModule):
-    def __init__(self, config: omegaconf.DictConfig) -> None:
+    def __init__(self, config: omegaconf.DictConfig, cache_dir_path: str|None = None) -> None:
         super().__init__()
         self.config = config
         self.example_input_array = torch.randn((1,1,len(self.config.sino_angles) if self.config.sino_angles != None else 256,len(self.config.sino_positions) if self.config.sino_positions != None else ceil((self.config.img_size*1.41421356237)/2.0)*2+1)) #Needed for pytorch lightning
@@ -34,6 +29,22 @@ class FBPModel(pl.LightningModule):
 
         self.angles = torch.nn.parameter.Parameter(torch.tensor(self.config.sino_angles, dtype=torch.float32), requires_grad=False) if self.config.sino_angles != None else None
         self.positions = torch.nn.parameter.Parameter(torch.tensor(self.config.sino_positions, dtype=torch.float32), requires_grad=False) if self.config.sino_positions != None else None
+
+        if cache_dir_path is not None:
+            #self.vt = torch.nn.parameter.Parameter(torch.load(cache_dir_path+"/vt.pt"), requires_grad=False)
+            #self.d = torch.nn.parameter.Parameter(torch.load(cache_dir_path+"/d.pt"), requires_grad=False)
+            #self.u = torch.nn.parameter.Parameter(torch.load(cache_dir_path+"/u.pt"), requires_grad=False)
+            self.A = torch.nn.parameter.Parameter(torch.load(cache_dir_path+"/A.pt"), requires_grad=False)
+        else:
+            #matrix = radon.radon_matrix(torch.zeros(self.config.img_size, self.config.img_size), thetas=self.angles, positions=self.positions)
+            #v, d, ut = torch.linalg.svd(matrix, full_matrices=False)
+            #self.vt = torch.nn.parameter.Parameter(v.mT, requires_grad=False)
+            #self.d = torch.nn.parameter.Parameter(d, requires_grad=False)
+            #self.u = torch.nn.parameter.Parameter(ut.mT, requires_grad=False)
+            A = radon.radon_matrix(torch.zeros(self.config.img_size, self.config.img_size), thetas=self.angles, positions=self.positions)
+            self.A = torch.nn.parameter.Parameter(A.mT@A, requires_grad=False)
+
+
 
         #Setup metrics
         with warnings.catch_warnings():
@@ -73,8 +84,15 @@ class FBPModel(pl.LightningModule):
 
     #Apply model for n iterations
     def forward(self, sino: torch.Tensor) -> torch.Tensor: #type: ignore
-        filtered_sinogram = radon.radon_filter(sino, radon.ram_lak_filter)
-        return radon.radon_backward(filtered_sinogram, self.config.img_size, self.angles, self.positions)
+        #filtered_sinogram = radon.radon_filter(sino, radon.ram_lak_filter)
+        #return radon.radon_backward(filtered_sinogram, self.config.img_size, self.angles, self.positions)
+        
+        #return torch.reshape(self.u@torch.diag(1.0/self.d)@self.vt@sino.reshape(sino.shape[0],-1,1), (sino.shape[0],1,self.config.img_size,self.config.img_size))
+
+        b = radon.radon_backward(sino, self.config.img_size, self.angles, self.positions)
+        b = b.reshape(*b.shape[:-2], -1, 1)
+        z = torch.linalg.solve(self.A, b)
+        return z.reshape(sino.shape[0], 1, self.config.img_size, self.config.img_size)
     
 
 

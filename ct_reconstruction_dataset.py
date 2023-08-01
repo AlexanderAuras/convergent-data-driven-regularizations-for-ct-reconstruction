@@ -20,5 +20,6 @@ class CTReconstructionDataset(torch.utils.data.Dataset[typing.Tuple[torch.Tensor
     def __getitem__(self, i: int) -> typing.Tuple[torch.Tensor, torch.Tensor]:
         sample = self.__dataset[i]
         ground_truth = sample[self.__gt_idx]
+        #sinogram = radon.radon_forward(ground_truth.contiguous().unsqueeze(0).to("cuda"), self.__angles, self.__positions)[0].to("cpu")
         sinogram = radon.radon_forward(ground_truth.contiguous().unsqueeze(0), self.__angles, self.__positions)[0]
         return (sinogram, ground_truth)

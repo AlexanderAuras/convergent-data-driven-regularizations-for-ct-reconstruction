@@ -1,32 +1,27 @@
 import inspect
-from math import ceil
 import typing
 import warnings
+from math import ceil
 
+import matplotlib
 import omegaconf
-
 import pytorch_lightning as pl
 import pytorch_lightning.loggers
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.tensorboard
-
 import torchmetrics
 
-import matplotlib
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
-
 import radon as radon
 
 from utils import log_img
 
 
-
 class SVDModel(pl.LightningModule):
-    def __init__(self, config: omegaconf.DictConfig) -> None:
+    def __init__(self, config: omegaconf.DictConfig, cache_dir_path: str|None = None) -> None:
         super().__init__()
         self.config = config
         self.example_input_array = torch.randn((1,1,len(self.config.sino_angles) if self.config.sino_angles != None else 256,len(self.config.sino_positions) if self.config.sino_positions != None else ceil((self.config.img_size*1.41421356237)/2.0)*2+1)) #Needed for pytorch lightning
@@ -35,11 +30,17 @@ class SVDModel(pl.LightningModule):
         self.angles = torch.nn.parameter.Parameter(torch.tensor(self.config.sino_angles, dtype=torch.float32), requires_grad=False) if self.config.sino_angles != None else None
         self.positions = torch.nn.parameter.Parameter(torch.tensor(self.config.sino_positions, dtype=torch.float32), requires_grad=False) if self.config.sino_positions != None else None
         
-        matrix = radon.radon_matrix(torch.zeros(self.config.img_size, self.config.img_size), thetas=self.angles, positions=self.positions)
-        v, d, ut = torch.linalg.svd(matrix, full_matrices=False)
-        self.vt = torch.nn.parameter.Parameter(v.mT, requires_grad=False)
-        torch.save(d, "singular_values.pt")
-        self.u = torch.nn.parameter.Parameter(ut.mT, requires_grad=False)
+        if cache_dir_path is not None:
+            self.vt = torch.nn.parameter.Parameter(torch.load(cache_dir_path+"/vt.pt"), requires_grad=False)
+            d = torch.load(cache_dir_path+"/d.pt")
+            torch.save(d, "singular_values.pt")
+            self.u = torch.nn.parameter.Parameter(torch.load(cache_dir_path+"/u.pt"), requires_grad=False)
+        else:
+            matrix = radon.radon_matrix(torch.zeros(self.config.img_size, self.config.img_size), thetas=self.angles, positions=self.positions)
+            v, d, ut = torch.linalg.svd(matrix, full_matrices=False)
+            self.vt = torch.nn.parameter.Parameter(v.mT, requires_grad=False)
+            torch.save(d, "singular_values.pt")
+            self.u = torch.nn.parameter.Parameter(ut.mT, requires_grad=False)
         self.split_filter_params = []
         if self.config.model.initialization == "zeros":
             for i in range(d.shape[0]):

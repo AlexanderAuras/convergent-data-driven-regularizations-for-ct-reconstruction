@@ -1,23 +1,23 @@
 #pyright: reportGeneralTypeIssues=false
 
-from math import atan, cos, sin, tan
 import typing
+from math import atan, cos, sin, tan
 
+import matplotlib
 import omegaconf
 import pytorch_lightning as pl
 import torch
 import torch.utils.data
 import torchvision.transforms
 import torchvision.transforms.functional
-import matplotlib
+
 matplotlib.use("agg")
 import matplotlib.patches
 import matplotlib.pyplot as plt
 import numpy as np
 
 from ct_reconstruction_dataset import CTReconstructionDataset
-from fixed_noise_dataset import Noise, FixedNoiseDataset
-
+from fixed_noise_dataset import FixedNoiseDataset, Noise
 
 
 class _EllipsesDataset(torch.utils.data.Dataset[typing.Tuple[torch.Tensor, None]]):
@@ -124,7 +124,8 @@ class EllipsesDataModule(pl.LightningDataModule):
             self.config.trainval_dataset.ellipse_size, 
             self.config.trainval_dataset.ellipse_size_min, 
             training_transform if self.config.trainval_dataset.blurred else None, 
-            generator)
+            generator
+        )
         training_dataset = CTReconstructionDataset(training_dataset)
         training_dataset = FixedNoiseDataset(training_dataset, noise=self.__noise, append_clean=True, append_noise=True)
         return torch.utils.data.DataLoader(
@@ -150,8 +151,8 @@ class EllipsesDataModule(pl.LightningDataModule):
             validation_transform if self.config.trainval_dataset.blurred else None, 
             generator
         )
-        validation_dataset = CTReconstructionDataset(validation_dataset)
-        validation_dataset = FixedNoiseDataset(validation_dataset, noise=self.__noise, append_clean=True, append_noise=True)
+        #validation_dataset = CTReconstructionDataset(validation_dataset)
+        #validation_dataset = FixedNoiseDataset(validation_dataset, noise=self.__noise, append_clean=True, append_noise=True)
         return torch.utils.data.DataLoader(
             validation_dataset, 
             drop_last=self.config.drop_last_validation_batch, 

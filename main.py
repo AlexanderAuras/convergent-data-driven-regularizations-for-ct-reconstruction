@@ -13,11 +13,12 @@
 #pyright: reportPrivateImportUsage=false, reportGeneralTypeIssues=false
 import functools
 import logging
-from math import ceil, sqrt
 import os
+import pathlib
 import subprocess
 import typing
 import warnings
+from math import ceil, sqrt
 
 import hydra
 import hydra.core.hydra_config
@@ -32,21 +33,23 @@ import pytorch_lightning.accelerators
 import pytorch_lightning.callbacks
 import pytorch_lightning.loggers
 import pytorch_lightning.utilities
-
 import torch
 import torch.utils.tensorboard
 import torch.version
 
-from mnist_datamodule import MNISTDataModule
-from ellipses_datamodule import EllipsesDataModule
-from lodopab_datamodule import LoDoPaBDataModule
-from apple_ct_dataset import AppleCTDataset
 from apple_ct_datamodule import AppleCTDataModule
+from apple_ct_dataset import AppleCTDataset
+from ellipses2_datamodule import Ellipses2DataModule
+from fbp_model import FBPModel
 from filter_model import FilterModel
+from fixed_noise_dataset import (AdditiveElementwiseGaussianNoise,
+                                 AdditiveElementwisePoissonNoise,
+                                 AdditiveElementwiseUniformNoise,
+                                 AdditiveTensorwiseGaussianNoise)
+from lodopab2_datamodule import LoDoPaB2DataModule
+from mnist_datamodule import MNISTDataModule
 from svd_model import SVDModel
 from tikhonov_model import TikhonovModel
-from fbp_model import FBPModel
-from fixed_noise_dataset import AdditiveElementwiseGaussianNoise, AdditiveElementwiseUniformNoise, AdditiveElementwisePoissonNoise, AdditiveTensorwiseGaussianNoise
 
 
 #Custom version of pytorch lightnings TensorBoardLogger, to allow manipulation of internal logging settings
@@ -68,6 +71,8 @@ class CustomTensorBoardLogger(pytorch_lightning.loggers.TensorBoardLogger):
 
 @hydra.main(config_path="configs", config_name="default", version_base=None)
 def main(config: omegaconf.DictConfig) -> None:
+    #multiprocessing.set_start_method("spawn")
+
     #Setup logging
     logger = logging.getLogger(__name__)
     logging.captureWarnings(True)
@@ -105,16 +110,24 @@ def main(config: omegaconf.DictConfig) -> None:
     if config.trainval_dataset.name == "MNIST":
         trainval_datamodule = MNISTDataModule(config, trainval_noise)
     elif config.trainval_dataset.name == "Ellipses":
-        trainval_datamodule = EllipsesDataModule(config, trainval_noise)
+        #trainval_datamodule = EllipsesDataModule(config, trainval_noise)
+        config.img_size = 64
+        config.sino_angles = torch.linspace(0.0, torch.pi, 257)[:-1].tolist()
+        config.sino_positions = torch.arange(-ceil(64*1.41421356237/2.0), ceil(64*1.41421356237/2.0)+1, dtype=torch.float).tolist()
+        trainval_datamodule = Ellipses2DataModule(config, trainval_noise)
     elif config.trainval_dataset.name == "LoDoPaB":
-        trainval_datamodule = LoDoPaBDataModule(config)
-        if config.sino_angles != None:
-            raise RuntimeError("Incompatible sino_angles")
-        if config.sino_positions != None:
-            raise RuntimeError("Incompatible sino_positions")
-        config.img_size = 362
-        config.sino_angles = torch.linspace(torch.pi*0.5, torch.pi*1.5, 501)[:-1].flip(-1).tolist()
-        config.sino_positions = (-torch.linspace(-362.0/sqrt(2.0), 362.0/sqrt(2.0), 257, dtype=torch.float)).tolist()
+        config.img_size = 64
+        config.sino_angles = torch.linspace(0.0, torch.pi, 257)[:-1].tolist()
+        config.sino_positions = torch.arange(-ceil(64*1.41421356237/2.0), ceil(64*1.41421356237/2.0)+1, dtype=torch.float).tolist()
+        trainval_datamodule = LoDoPaB2DataModule(config, trainval_noise)
+        #trainval_datamodule = LoDoPaBDataModule(config)
+        #if config.sino_angles != None:
+        #    raise RuntimeError("Incompatible sino_angles")
+        #if config.sino_positions != None:
+        #    raise RuntimeError("Incompatible sino_positions")
+        #config.img_size = 362
+        #config.sino_angles = torch.linspace(torch.pi*0.5, torch.pi*1.5, 501)[:-1].flip(-1).tolist()
+        #config.sino_positions = (-torch.linspace(-362.0/sqrt(2.0), 362.0/sqrt(2.0), 257, dtype=torch.float)).tolist()
     elif config.trainval_dataset.name == "Apple-CT":
         trainval_datamodule = AppleCTDataModule(config)
         if config.sino_angles != None:
@@ -143,18 +156,26 @@ def main(config: omegaconf.DictConfig) -> None:
     if config.test_dataset.name == "MNIST":
         test_datamodule = MNISTDataModule(config, test_noise)
     elif config.test_dataset.name == "Ellipses":
-        test_datamodule = EllipsesDataModule(config, test_noise)
+        #test_datamodule = EllipsesDataModule(config, test_noise)
+        config.img_size = 64
+        config.sino_angles = torch.linspace(0.0, torch.pi, 257)[:-1].tolist()
+        config.sino_positions = torch.arange(-ceil(64*1.41421356237/2.0), ceil(64*1.41421356237/2.0)+1, dtype=torch.float).tolist()
+        test_datamodule = Ellipses2DataModule(config, test_noise)
     elif config.test_dataset.name == "LoDoPaB":
-        test_datamodule = LoDoPaBDataModule(config)
-        if config.img_size != None and config.trainval_dataset.name != "LoDoPaB":
-            raise RuntimeError("Incompatible img_size")
-        if config.sino_angles != None and config.trainval_dataset.name != "LoDoPaB":
-            raise RuntimeError("Incompatible sino_angles")
-        if config.sino_positions != None and config.trainval_dataset.name != "LoDoPaB":
-            raise RuntimeError("Incompatible sino_positions")
-        config.img_size = 362
-        config.sino_angles = torch.linspace(torch.pi*0.5, torch.pi*1.5, 501)[:-1].flip(-1).tolist()
-        config.sino_positions = (-torch.linspace(-362.0/sqrt(2.0), 362.0/sqrt(2.0), 257, dtype=torch.float)).tolist()
+        config.img_size = 64
+        config.sino_angles = torch.linspace(0.0, torch.pi, 257)[:-1].tolist()
+        config.sino_positions = torch.arange(-ceil(64*1.41421356237/2.0), ceil(64*1.41421356237/2.0)+1, dtype=torch.float).tolist()
+        test_datamodule = LoDoPaB2DataModule(config, test_noise)
+        #test_datamodule = LoDoPaBDataModule(config)
+        #if config.img_size != None and config.trainval_dataset.name != "LoDoPaB":
+        #    raise RuntimeError("Incompatible img_size")
+        #if config.sino_angles != None and config.trainval_dataset.name != "LoDoPaB":
+        #    raise RuntimeError("Incompatible sino_angles")
+        #if config.sino_positions != None and config.trainval_dataset.name != "LoDoPaB":
+        #    raise RuntimeError("Incompatible sino_positions")
+        #config.img_size = 362
+        #config.sino_angles = torch.linspace(torch.pi*0.5, torch.pi*1.5, 501)[:-1].flip(-1).tolist()
+        #config.sino_positions = (-torch.linspace(-362.0/sqrt(2.0), 362.0/sqrt(2.0), 257, dtype=torch.float)).tolist()
     elif config.test_dataset.name == "Apple-CT":
         test_datamodule = AppleCTDataModule(config)
         if config.sino_angles != None and config.trainval_dataset.name != "Apple-CT":
@@ -191,7 +212,18 @@ def main(config: omegaconf.DictConfig) -> None:
     if config.checkpoint != None:
         model = modelClass.load_from_checkpoint(os.path.abspath(os.path.join("../../" if hydra.core.hydra_config.HydraConfig.get().mode == hydra.types.RunMode.MULTIRUN else "../", config.checkpoint)), config=config)
     else:
-        model = modelClass(config)
+        if modelClass == SVDModel or modelClass == FBPModel:
+            model = modelClass(config, str(pathlib.Path(__file__).parent.joinpath("cache")))
+        elif modelClass == TikhonovModel:
+            model = modelClass(config, str(pathlib.Path(__file__).parent.joinpath("cache", "A_"+config.noise_type[0]+{
+                0.0: "n",
+                0.005: "l",
+                0.015: "m",
+                0.03: "h",
+                #0.0: "x"
+            }[config.noise_level]+config.trainval_dataset.name[0].lower()+".pt")))
+        else:
+            model = modelClass(config)
 
     #import radon
     #batch = next(iter(test_datamodule.test_dataloader()))

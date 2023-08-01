@@ -1,32 +1,27 @@
 import inspect
-from math import ceil
 import typing
 import warnings
+from math import ceil
 
+import matplotlib
 import omegaconf
-
 import pytorch_lightning as pl
 import pytorch_lightning.loggers
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.tensorboard
-
 import torchmetrics
 
-import matplotlib
 matplotlib.use("agg")
-import matplotlib.pyplot as plt
 
 import radon as radon
 
 from utils import log_img
 
 
-
 class TikhonovModel(pl.LightningModule):
-    def __init__(self, config: omegaconf.DictConfig) -> None:
+    def __init__(self, config: omegaconf.DictConfig, cache_file_path: str|None = None) -> None:
         super().__init__()
         self.config = config
         self.example_input_array = torch.randn((1,1,len(self.config.sino_angles) if self.config.sino_angles != None else 256,len(self.config.sino_positions) if self.config.sino_positions != None else ceil((self.config.img_size*1.41421356237)/2.0)*2+1)) #Needed for pytorch lightning
@@ -35,23 +30,26 @@ class TikhonovModel(pl.LightningModule):
         self.angles = torch.nn.parameter.Parameter(torch.tensor(self.config.sino_angles, dtype=torch.float32), requires_grad=False) if self.config.sino_angles != None else None
         self.positions = torch.nn.parameter.Parameter(torch.tensor(self.config.sino_positions, dtype=torch.float32), requires_grad=False) if self.config.sino_positions != None else None
         
-        #print("Calculating radon matrix", flush=True)
-        A = radon.radon_matrix(torch.zeros(self.config.img_size, self.config.img_size), thetas=self.angles, positions=self.positions)
-        #print("Calculating regularized matrix", flush=True)
-        alphaI = self.config.model.alpha*torch.eye(A.shape[1])
-        #print(alphaI.shape, flush=True)
-        ATA = A.mT@A
-        #print(ATA.shape, flush=True)
-        pre_inv = ATA + alphaI
-        #print("Pre_inv calculated", flush=True)
-        ######
-        self.A = torch.nn.parameter.Parameter(pre_inv, requires_grad=False)
-        ######
-        #inv = torch.inverse(pre_inv)
-        #print("Inverse calculated")
-        #self.matrix = torch.nn.parameter.Parameter(inv@A.mT, requires_grad=False)
-        ##self.matrix = (A.mT@A+self.config.alpha*torch.eye(A.shape[1])).inv()@A.mT
-        #print("Regularized matrix calculated")
+        if cache_file_path is not None:
+            self.A = torch.nn.parameter.Parameter(torch.load(cache_file_path), requires_grad=False)
+        else:
+            #print("Calculating radon matrix", flush=True)
+            A = radon.radon_matrix(torch.zeros(self.config.img_size, self.config.img_size), thetas=self.angles, positions=self.positions)
+            #print("Calculating regularized matrix", flush=True)
+            alphaI = self.config.model.alpha*torch.eye(A.shape[1])
+            #print(alphaI.shape, flush=True)
+            ATA = A.mT@A
+            #print(ATA.shape, flush=True)
+            pre_inv = ATA + alphaI
+            #print("Pre_inv calculated", flush=True)
+            ######
+            self.A = torch.nn.parameter.Parameter(pre_inv, requires_grad=False)
+            ######
+            #inv = torch.inverse(pre_inv)
+            #print("Inverse calculated")
+            #self.matrix = torch.nn.parameter.Parameter(inv@A.mT, requires_grad=False)
+            ##self.matrix = (A.mT@A+self.config.alpha*torch.eye(A.shape[1])).inv()@A.mT
+            #print("Regularized matrix calculated")
 
         #Setup metrics
         with warnings.catch_warnings():
